@@ -1,0 +1,581 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CUSTOMER
+  ELECTRICIAN
+  ADMIN
+
+  @@map("roles")
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@map("verification_statuses")
+}
+
+enum DocumentType {
+  GOVERNMENT_ID
+  TRADE_LICENSE
+  INSURANCE_CERTIFICATE
+  OTHER
+
+  @@map("document_types")
+}
+
+enum PricingType {
+  FIXED
+  HOURLY
+  INSPECTION
+
+  @@map("pricing_types")
+}
+
+enum BookingType {
+  DIRECT
+  OPEN_REQUEST
+
+  @@map("booking_types")
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  ON_THE_WAY
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+
+  @@map("booking_statuses")
+}
+
+enum QuoteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+
+  @@map("quote_statuses")
+}
+
+enum InvoiceStatus {
+  ISSUED
+  APPROVED
+  PAID
+  DISPUTED
+
+  @@map("invoice_statuses")
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE_SANDBOX
+  CARD
+  WALLET
+
+  @@map("payment_methods")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+
+  @@map("payment_statuses")
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+
+  @@map("dispute_statuses")
+}
+
+enum ReportTargetType {
+  REVIEW
+  USER
+  ELECTRICIAN
+  BOOKING
+
+  @@map("report_target_types")
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  DISMISSED
+
+  @@map("report_statuses")
+}
+
+model User {
+  id                   String           @id @default(uuid())
+  name                 String
+  email                String           @unique
+  password             String
+  phone                String?
+  avatarUrl            String?          @map("avatar_url")
+  role                 Role             @default(CUSTOMER)
+  isVerified           Boolean          @default(false) @map("is_verified")
+  verificationToken    String?          @map("verification_token")
+  resetPasswordToken   String?          @map("reset_password_token")
+  resetPasswordExpires DateTime?        @map("reset_password_expires")
+  isActive             Boolean          @default(true) @map("is_active")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  electricianProfile   ElectricianProfile?
+  addresses            Address[]
+  customerBookings     Booking[]        @relation("CustomerBookings")
+  cancelledBookings    Booking[]        @relation("CancelledBookings")
+  statusHistories      BookingStatusHistory[]
+  customerInvoices     Invoice[]        @relation("CustomerInvoices")
+  payments             Payment[]
+  reviews              Review[]
+  messages             Message[]
+  notifications        Notification[]
+  favorites            Favorite[]
+  disputesRaised       Dispute[]        @relation("DisputesRaised")
+  disputesResolved     Dispute[]        @relation("DisputesResolved")
+  reportsCreated       Report[]         @relation("ReportsCreated")
+  reportsReviewed      Report[]         @relation("ReportsReviewed")
+  auditLogs            AuditLog[]
+
+  @@index([role])
+  @@index([email])
+  @@map("users")
+}
+
+model ElectricianProfile {
+  id                   String           @id @default(uuid())
+  userId               String           @unique @map("user_id")
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                  String?          @db.Text
+  experienceYears      Int              @default(0) @map("experience_years")
+  skills               Json?
+  serviceRadiusKm      Float            @default(15.0) @map("service_radius_km")
+  latitude             Float            @default(23.8103)
+  longitude            Float            @default(90.4125)
+  addressText          String?          @map("address_text")
+  city                 String?          @default("Dhaka")
+  isOnline             Boolean          @default(true) @map("is_online")
+  verificationStatus   VerificationStatus @default(PENDING) @map("verification_status")
+  rejectionReason      String?          @db.Text @map("rejection_reason")
+  hourlyRate           Float            @default(30.0) @map("hourly_rate")
+  emergencyAvailable   Boolean          @default(true) @map("emergency_available")
+  ratingAverage        Float            @default(0.0) @map("rating_average")
+  reviewCount          Int              @default(0) @map("review_count")
+  portfolioPhotos      Json?            @map("portfolio_photos")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  documents            VerificationDocument[]
+  services             Service[]
+  availabilitySlots    AvailabilitySlot[]
+  timeOffs             TimeOff[]
+  bookings             Booking[]
+  quotes               Quote[]
+  invoices             Invoice[]
+  reviews              Review[]
+  favoritedBy          Favorite[]
+
+  @@index([latitude, longitude])
+  @@index([verificationStatus])
+  @@index([ratingAverage])
+  @@index([isOnline])
+  @@map("electrician_profiles")
+}
+
+model VerificationDocument {
+  id                   String             @id @default(uuid())
+  electricianProfileId String             @map("electrician_profile_id")
+  electricianProfile   ElectricianProfile @relation(fields: [electricianProfileId], references: [id], onDelete: Cascade)
+  documentType         DocumentType       @map("document_type")
+  documentUrl          String             @db.Text @map("document_url")
+  documentNumber       String?            @map("document_number")
+  verificationStatus   VerificationStatus @default(PENDING) @map("verification_status")
+  adminNotes           String?            @db.Text @map("admin_notes")
+  reviewedAt           DateTime?          @map("reviewed_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@index([electricianProfileId])
+  @@index([verificationStatus])
+  @@map("verification_documents")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?   @db.Text
+  iconUrl     String?   @map("icon_url")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  services    Service[]
+  bookings    Booking[]
+
+  @@map("categories")
+}
+
+model Service {
+  id                   String             @id @default(uuid())
+  electricianProfileId String             @map("electrician_profile_id")
+  electricianProfile   ElectricianProfile @relation(fields: [electricianProfileId], references: [id], onDelete: Cascade)
+  categoryId           String             @map("category_id")
+  category             Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  title                String
+  description          String?            @db.Text
+  pricingType          PricingType        @default(FIXED) @map("pricing_type")
+  basePrice            Float              @map("base_price")
+  estimatedDurationMin Int                @default(60) @map("estimated_duration_min")
+  isActive             Boolean            @default(true) @map("is_active")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  bookings             Booking[]
+
+  @@index([electricianProfileId])
+  @@index([categoryId])
+  @@map("services")
+}
+
+model AvailabilitySlot {
+  id                   String             @id @default(uuid())
+  electricianProfileId String             @map("electrician_profile_id")
+  electricianProfile   ElectricianProfile @relation(fields: [electricianProfileId], references: [id], onDelete: Cascade)
+  dayOfWeek            Int                @map("day_of_week")
+  startTime            String             @map("start_time")
+  endTime              String             @map("end_time")
+  isActive             Boolean            @default(true) @map("is_active")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@index([electricianProfileId, dayOfWeek])
+  @@map("availability_slots")
+}
+
+model TimeOff {
+  id                   String             @id @default(uuid())
+  electricianProfileId String             @map("electrician_profile_id")
+  electricianProfile   ElectricianProfile @relation(fields: [electricianProfileId], references: [id], onDelete: Cascade)
+  startDate            DateTime           @map("start_date")
+  endDate              DateTime           @map("end_date")
+  reason               String?
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@index([electricianProfileId, startDate, endDate])
+  @@map("time_off")
+}
+
+model Address {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label       String   @default("Home")
+  street      String
+  city        String
+  state       String?
+  zipCode     String?  @map("zip_code")
+  latitude    Float
+  longitude   Float
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+model Booking {
+  id                   String               @id @default(uuid())
+  bookingNumber        String               @unique @map("booking_number")
+  customerId           String               @map("customer_id")
+  customer             User                 @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Restrict)
+  electricianId        String?              @map("electrician_id")
+  electrician          ElectricianProfile?  @relation(fields: [electricianId], references: [id], onDelete: SetNull)
+  serviceId            String?              @map("service_id")
+  service              Service?             @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  categoryId           String?              @map("category_id")
+  category             Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status               BookingStatus        @default(PENDING)
+  type                 BookingType          @default(DIRECT)
+  isEmergency          Boolean              @default(false) @map("is_emergency")
+  problemDescription  String               @db.Text @map("problem_description")
+  scheduledAt          DateTime             @map("scheduled_at")
+  estimatedDurationMin Int                  @default(60) @map("estimated_duration_min")
+  addressStreet        String               @map("address_street")
+  addressCity          String               @map("address_city")
+  addressZip           String?              @map("address_zip")
+  addressLat           Float                @map("address_lat")
+  addressLng           Float                @map("address_lng")
+  customerPhone        String               @map("customer_phone")
+  electricianPhone     String?              @map("electrician_phone")
+  cancellationReason   String?              @db.Text @map("cancellation_reason")
+  cancelledByUserId    String?              @map("cancelled_by_user_id")
+  cancelledBy          User?                @relation("CancelledBookings", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  photos               BookingPhoto[]
+  quotes               Quote[]
+  statusHistory        BookingStatusHistory[]
+  invoice              Invoice?
+  payments             Payment[]
+  review               Review?
+  messages             Message[]
+  disputes             Dispute[]
+
+  @@index([electricianId, scheduledAt])
+  @@index([customerId])
+  @@index([status])
+  @@index([type])
+  @@index([scheduledAt])
+  @@map("bookings")
+}
+
+model BookingPhoto {
+  id        String   @id @default(uuid())
+  bookingId String   @map("booking_id")
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  photoUrl  String   @db.Text @map("photo_url")
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([bookingId])
+  @@map("booking_photos")
+}
+
+model Quote {
+  id                   String             @id @default(uuid())
+  bookingId            String             @map("booking_id")
+  booking              Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  electricianId        String             @map("electrician_id")
+  electrician          ElectricianProfile @relation(fields: [electricianId], references: [id], onDelete: Cascade)
+  estimatedPrice       Float              @map("estimated_price")
+  laborCost            Float?             @map("labor_cost")
+  partsCost            Float?             @map("parts_cost")
+  estimatedDurationMin Int                @default(60) @map("estimated_duration_min")
+  note                 String?            @db.Text
+  status               QuoteStatus        @default(PENDING)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  @@index([bookingId])
+  @@index([electricianId])
+  @@map("quotes")
+}
+
+model BookingStatusHistory {
+  id              String         @id @default(uuid())
+  bookingId       String         @map("booking_id")
+  booking         Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  fromStatus      BookingStatus? @map("from_status")
+  toStatus        BookingStatus  @map("to_status")
+  changedByUserId String         @map("changed_by_user_id")
+  changedBy       User           @relation(fields: [changedByUserId], references: [id], onDelete: Restrict)
+  reason          String?        @db.Text
+  metadata        Json?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  @@index([bookingId])
+  @@map("booking_status_history")
+}
+
+model Invoice {
+  id             String             @id @default(uuid())
+  invoiceNumber  String             @unique @map("invoice_number")
+  bookingId      String             @unique @map("booking_id")
+  booking        Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  electricianId  String             @map("electrician_id")
+  electrician    ElectricianProfile @relation(fields: [electricianId], references: [id], onDelete: Restrict)
+  customerId     String             @map("customer_id")
+  customer       User               @relation("CustomerInvoices", fields: [customerId], references: [id], onDelete: Restrict)
+  laborCost      Float              @default(0.0) @map("labor_cost")
+  partsCost      Float              @default(0.0) @map("parts_cost")
+  tax            Float              @default(0.0)
+  platformFee    Float              @default(0.0) @map("platform_fee")
+  totalAmount    Float              @map("total_amount")
+  items          Json?
+  notes          String?            @db.Text
+  status         InvoiceStatus      @default(ISSUED)
+  approvedAt     DateTime?          @map("approved_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  payments       Payment[]
+
+  @@index([electricianId])
+  @@index([customerId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  bookingId      String        @map("booking_id")
+  booking        Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  invoiceId      String?       @map("invoice_id")
+  invoice        Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  customerId     String        @map("customer_id")
+  customer       User          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  amount         Float
+  currency       String        @default("USD")
+  method         PaymentMethod @default(CASH)
+  status         PaymentStatus @default(PENDING)
+  transactionId  String?       @map("transaction_id")
+  idempotencyKey String?       @unique @map("idempotency_key")
+  receiptUrl     String?       @map("receipt_url")
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@index([bookingId])
+  @@index([customerId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Review {
+  id            String             @id @default(uuid())
+  bookingId     String             @unique @map("booking_id")
+  booking       Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customerId    String             @map("customer_id")
+  customer      User               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  electricianId String             @map("electrician_id")
+  electrician   ElectricianProfile @relation(fields: [electricianId], references: [id], onDelete: Cascade)
+  rating        Int
+  comment       String             @db.Text
+  photos        Json?
+  replyComment  String?            @db.Text @map("reply_comment")
+  repliedAt     DateTime?          @map("replied_at")
+  isReported    Boolean            @default(false) @map("is_reported")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  @@index([electricianId])
+  @@index([customerId])
+  @@index([rating])
+  @@map("reviews")
+}
+
+model Message {
+  id             String    @id @default(uuid())
+  bookingId      String    @map("booking_id")
+  booking        Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  senderId       String    @map("sender_id")
+  sender         User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content        String    @db.Text
+  attachmentUrl  String?   @db.Text @map("attachment_url")
+  attachmentType String?   @map("attachment_type")
+  isRead         Boolean   @default(false) @map("is_read")
+  readAt         DateTime? @map("read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([bookingId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  message    String    @db.Text
+  type       String    @default("SYSTEM")
+  entityId   String?   @map("entity_id")
+  entityType String?   @map("entity_type")
+  isRead     Boolean   @default(false) @map("is_read")
+  readAt     DateTime? @map("read_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Favorite {
+  id            String             @id @default(uuid())
+  customerId    String             @map("customer_id")
+  customer      User               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  electricianId String             @map("electrician_id")
+  electrician   ElectricianProfile @relation(fields: [electricianId], references: [id], onDelete: Cascade)
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  @@unique([customerId, electricianId])
+  @@index([customerId])
+  @@map("favorites")
+}
+
+model Dispute {
+  id               String        @id @default(uuid())
+  bookingId        String        @map("booking_id")
+  booking          Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  raisedByUserId   String        @map("raised_by_user_id")
+  raisedBy         User          @relation("DisputesRaised", fields: [raisedByUserId], references: [id], onDelete: Restrict)
+  reason           String        @db.Text
+  evidencePhotos   Json?         @map("evidence_photos")
+  status           DisputeStatus @default(OPEN)
+  resolution       String?       @db.Text
+  resolvedByUserId String?       @map("resolved_by_user_id")
+  resolvedBy       User?         @relation("DisputesResolved", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  resolvedAt       DateTime?     @map("resolved_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("disputes")
+}
+
+model Report {
+  id               String           @id @default(uuid())
+  reporterUserId   String           @map("reporter_user_id")
+  reporter         User             @relation("ReportsCreated", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  targetType       ReportTargetType @map("target_type")
+  targetId         String           @map("target_id")
+  reason           String           @db.Text
+  status           ReportStatus     @default(PENDING)
+  reviewedByUserId String?          @map("reviewed_by_user_id")
+  reviewedBy       User?            @relation("ReportsReviewed", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@map("reports")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

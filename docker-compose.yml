@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: voltfix_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: voltfix_db
+      MYSQL_USER: voltfix_user
+      MYSQL_PASSWORD: voltfix_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voltfix_api
+    restart: always
+    environment:
+      PORT: 5000
+      NODE_ENV: production
+      DATABASE_URL: "mysql://voltfix_user:voltfix_password@mysql:3306/voltfix_db"
+      JWT_ACCESS_SECRET: "voltfix_production_access_key_min_32_characters_123"
+      JWT_ACCESS_EXPIRES_IN: "15m"
+      JWT_REFRESH_SECRET: "voltfix_production_refresh_key_min_32_characters_123"
+      JWT_REFRESH_EXPIRES_IN: "7d"
+      CLIENT_URL: "http://localhost"
+      ENABLE_PAYMENTS: "true"
+      LOG_LEVEL: "info"
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voltfix_web
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  mysql_data:
+  uploads_data:
